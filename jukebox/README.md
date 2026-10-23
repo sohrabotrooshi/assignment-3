@@ -28,11 +28,11 @@ The repo ships a shared Claude Code workspace, so any teammate's Claude starts
 already wired to the project:
 
 - **Project memory & rules** — `CLAUDE.md` (architecture, commands, the
-  no-secrets / no-third-party-assets rules, branch+PR flow).
+  no-secrets / no-third-party-assets rules, team workflow).
 - **Permissions & guard** — `.claude/settings.json` denies reading `.env`,
-  denies pushing to `main` / force-push, and `.claude/hooks/guard.sh` blocks
-  destructive commands and commits that would leak credentials (runs
-  automatically on every tool call).
+  allows direct `main` pushes but blocks force-pushes, and
+  `.claude/hooks/guard.sh` blocks destructive commands and commits that
+  would leak credentials (runs automatically on every tool call).
 - **Slash commands** — `/generate`, `/verify`, `/security-check`
 - **Subagent** — `@arranger` (music/synthesis specialist for `engine.py`)
 

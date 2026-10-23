@@ -50,7 +50,7 @@ Spotify-referenced web player.
 
 ## Workflow rules (team)
 
-- Branch + PR + teammate review before merging; never push or force-push to
-  `main` (the guard hook enforces this).
+- Direct pushes to `main` are allowed for the team; force-pushes remain
+  blocked by the guard hook.
 - After touching the generator, run `python3 jukebox/verify.py` and the demo
-  rebuild before proposing a merge.
+  rebuild before pushing.

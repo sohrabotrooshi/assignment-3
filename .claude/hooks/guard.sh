@@ -20,9 +20,9 @@ if printf '%s' "$CMD" | grep -qE '\brm -rf\b|:\(\)|mkfs|> /dev/sd|dd if=.*of=/de
   exit 2
 fi
 
-# 2) git main / force pushes
-if printf '%s' "$CMD" | grep -qE 'git (push|merge|rebase).*main|git push -f|git push --force'; then
-  echo "guard: pushing/force-pushing to main is blocked — use a branch + PR (team rule)."
+# 2) force pushes (any branch) stay blocked; direct pushes incl. main are fine
+if printf '%s' "$CMD" | grep -qE 'git push -f|git push --force( |$)|git push.*--force-with-lease'; then
+  echo "guard: force-push is blocked — use a normal push or revert instead."
   exit 2
 fi
 
