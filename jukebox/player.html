@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Jukebox</title>
+<style>
+  :root {
+    --acc: #ff2d78; --acc2: #7b5cff; --bg: #07070d; --card: #10101a;
+    --line: rgba(255,255,255,.08); --fg: #eef0f8; --mut: #8a8fa6;
+    --dj: #22d3ee; --font: ui-rounded, -apple-system, "SF Pro Rounded", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html,body { height: 100%; }
+  body {
+    background:
+      radial-gradient(1200px 500px at 75% -10%, color-mix(in srgb, var(--acc) 14%, transparent), transparent 60%),
+      radial-gradient(900px 600px at -10% 110%, color-mix(in srgb, var(--acc2) 12%, transparent), transparent 55%),
+      var(--bg);
+    color: var(--fg); font-family: var(--font); overflow: hidden;
+  }
+  .wrap { height: 100dvh; display: grid; grid-template-rows: 62px 1fr 46px; gap: 0; }
+  header {
+    display: flex; align-items: center; gap: 18px; padding: 0 22px;
+    border-bottom: 1px solid var(--line); backdrop-filter: blur(14px);
+    background: rgba(10,10,18,.6); z-index: 5;
+  }
+  .logo { display: flex; align-items: baseline; gap: 10px; white-space: nowrap; }
+  .logo b { font-size: 20px; letter-spacing: 2px; font-weight: 900;
+            background: linear-gradient(90deg, var(--acc), var(--acc2));
+            -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .logo span { font-size: 11px; color: var(--mut); letter-spacing: 3px; text-transform: uppercase; }
+  .air { display: flex; align-items: center; gap: 8px; font-size: 11px; letter-spacing: 2px;
+         color: var(--mut); border: 1px solid var(--line); padding: 5px 12px; border-radius: 999px; }
+  .air i { width: 9px; height: 9px; border-radius: 50%; background: var(--dj);
+           box-shadow: 0 0 10px var(--dj); opacity: .35; }
+  .air.live i { opacity: 1; animation: blink 1.1s ease-in-out infinite; }
+  @keyframes blink { 50% { opacity: .15; } }
+  .spacer { flex: 1; }
+  select, button, input { font: inherit; color: var(--fg); background: var(--card);
+    border: 1px solid var(--line); border-radius: 10px; outline: none; }
+  select { padding: 7px 12px; font-size: 13px; max-width: 240px; cursor: pointer; }
+  .btn { padding: 7px 14px; font-size: 13px; cursor: pointer; transition: .15s; }
+  .btn:hover { border-color: var(--acc); color: var(--acc); }
+  main { display: grid; grid-template-columns: minmax(380px, 5fr) minmax(320px, 4fr);
+         gap: 16px; padding: 16px 22px; overflow: hidden; }
+  .deck { display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 18px;
+          padding: 16px; backdrop-filter: blur(8px); }
+  .deck-top { display: grid; grid-template-columns: minmax(150px, 1.1fr) 1.4fr; gap: 16px; }
+  .vinyl { position: relative; aspect-ratio: 1; max-height: 320px; border-radius: 16px;
+           overflow: hidden; box-shadow: 0 18px 50px rgba(0,0,0,.55); }
+  .vinyl img { width: 100%; height: 100%; object-fit: cover; }
+  .vinyl .disc { position: absolute; inset: 12%; border-radius: 50%;
+    background: conic-gradient(from 0deg, #111 0 15%, #1a1a22 15% 30%, #111 30% 45%,
+      #14141e 45% 60%, #111 60% 75%, #191921 75% 90%, #111 90%);
+    display: grid; place-items: center; box-shadow: 0 0 0 6px #05050a, 0 0 30px color-mix(in srgb, var(--acc) 40%, transparent); }
+  .vinyl .disc .center { width: 28%; aspect-ratio: 1; border-radius: 50%;
+    background: linear-gradient(135deg, var(--acc), var(--acc2)); }
+  .vinyl.playing .disc { animation: spin 3.2s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .now h2 { font-size: 26px; font-weight: 800; letter-spacing: .3px; line-height: 1.12; }
+  .now .art { color: var(--mut); font-size: 14px; margin-top: 2px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 4px; }
+  .chip { font-size: 10.5px; letter-spacing: 1px; padding: 3px 9px; border-radius: 999px;
+          border: 1px solid var(--line); color: var(--mut); text-transform: uppercase; }
+  .chip.genre { color: var(--acc); border-color: color-mix(in srgb, var(--acc) 45%, transparent);
+                background: color-mix(in srgb, var(--acc) 10%, transparent); }
+  .meta-line { font-size: 12px; color: var(--mut); margin-top: 6px; line-height: 1.6; }
+  .progress { margin-top: 14px; }
+  .bar { height: 6px; border-radius: 99px; background: rgba(255,255,255,.08); cursor: pointer; position: relative; }
+  .bar i { position: absolute; inset: 0 auto 0 0; width: 0%; border-radius: 99px;
+           background: linear-gradient(90deg, var(--acc), var(--acc2)); }
+  .times { display: flex; justify-content: space-between; font-size: 11px; color: var(--mut); margin-top: 5px;
+           font-variant-numeric: tabular-nums; }
+  .transport { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 10px; }
+  .tbtn { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center;
+          cursor: pointer; font-size: 17px; transition: .15s; user-select: none; }
+  .tbtn:hover { border-color: var(--acc); }
+  .tbtn.play { width: 60px; height: 60px; background: linear-gradient(135deg, var(--acc), var(--acc2));
+               border: 0; color: #fff; font-size: 24px; box-shadow: 0 10px 28px color-mix(in srgb, var(--acc) 45%, transparent); }
+  .tbtn.off { opacity: .35; }
+  .tbtn.on { color: var(--acc); border-color: var(--acc); }
+  .viz { height: 74px; margin-top: 2px; display: block; width: 100%; border-radius: 12px; }
+  .djbox { min-height: 64px; display: flex; gap: 12px; align-items: flex-start; }
+  .djtag { font-weight: 800; font-size: 11px; letter-spacing: 2px; color: var(--dj); white-space: nowrap;
+           padding: 5px 10px; border: 1px solid color-mix(in srgb, var(--dj) 40%, transparent);
+           border-radius: 999px; }
+  .djtxt { font-size: 14px; line-height: 1.5; color: #c9cde0; padding-top: 3px; }
+  .djbox.idle .djtxt { color: var(--mut); }
+  #lib { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .libhead { display: flex; gap: 8px; }
+  #search { flex: 1; padding: 8px 12px; font-size: 13px; }
+  .tracks { overflow-y: auto; display: flex; flex-direction: column; gap: 8px;
+            padding-right: 4px; flex: 1; }
+  .tracks::-webkit-scrollbar { width: 8px; }
+  .tracks::-webkit-scrollbar-thumb { background: rgba(255,255,255,.12); border-radius: 99px; }
+  .tr { display: grid; grid-template-columns: 52px 1fr auto; gap: 12px; align-items: center;
+        padding: 8px 10px; border-radius: 14px; cursor: pointer; border: 1px solid transparent; }
+  .tr:hover { background: rgba(255,255,255,.04); }
+  .tr.active { border-color: color-mix(in srgb, var(--acc) 35%, transparent);
+               background: color-mix(in srgb, var(--acc) 8%, transparent); }
+  .tr img { width: 52px; height: 52px; border-radius: 9px; object-fit: cover; }
+  .tr .nm { font-size: 13.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tr .sm { font-size: 11px; color: var(--mut); margin-top: 2px; display: flex; gap: 6px; align-items: center; }
+  .tr .djdot { color: var(--dj); font-size: 10px; letter-spacing: 1px; }
+  .tr .dur { font-size: 11px; color: var(--mut); font-variant-numeric: tabular-nums; }
+  .panel { display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
+  .ptabs { display: flex; gap: 6px; }
+  .ptab { flex: 1; text-align: center; font-size: 12px; letter-spacing: 1px; padding: 8px;
+          border-radius: 10px; cursor: pointer; color: var(--mut); border: 1px solid var(--line); }
+  .ptab.on { color: var(--fg); border-color: var(--acc); }
+  .pbody { flex: 1; overflow-y: auto; font-size: 13.5px; line-height: 1.75; color: #c9cde0; white-space: pre-wrap; }
+  .pbody::-webkit-scrollbar { width: 8px; }
+  .pbody::-webkit-scrollbar-thumb { background: rgba(255,255,255,.12); border-radius: 99px; }
+  .export { display: flex; flex-wrap: wrap; gap: 8px; }
+  .export a { color: var(--mut); font-size: 12px; text-decoration: none; padding: 6px 12px;
+              border: 1px solid var(--line); border-radius: 99px; }
+  .export a:hover { color: var(--fg); border-color: var(--acc); }
+  footer { display: flex; align-items: center; gap: 16px; padding: 0 22px; font-size: 11.5px;
+           color: var(--mut); border-top: 1px solid var(--line); white-space: nowrap; overflow: hidden; }
+  footer code { color: #cfd3e6; background: rgba(255,255,255,.05); padding: 2px 7px; border-radius: 6px; }
+  .surprise { margin-left: auto; cursor: pointer; }
+  .surprise:hover { color: var(--acc); }
+  @media (max-width: 940px) {
+    body { overflow: auto; }
+    .wrap { height: auto; min-height: 100dvh; grid-template-rows: auto 1fr auto; }
+    main { grid-template-columns: 1fr; }
+    .deck-top { grid-template-columns: 1fr; }
+    .tracks { max-height: 420px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo"><b>AI JUKEBOX</b><span>proc-gen radio</span></div>
+    <div class="air" id="air"><i></i><span id="airtxt">OFF AIR</span></div>
+    <div class="spacer"></div>
+    <select id="setlist"></select>
+    <button class="btn" id="btnRandom" title="Shuffle the deck">Shuffle</button>
+    <button class="btn" id="btnRepeat" title="Repeat setlist">Repeat</button>
+  </header>
+
+  <main>
+    <section class="deck">
+      <div class="deck-top">
+        <div class="vinyl" id="vinyl"><img id="vcover" src="" alt="cover"><div class="disc" id="disc"><div class="center"></div></div></div>
+        <div class="now card">
+          <div class="chips"><span class="chip genre" id="chGenre">—</span><span class="chip" id="chKey">—</span>
+            <span class="chip" id="chBpm">—</span><span class="chip" id="chMood">—</span></div>
+          <h2 id="nTitle">Load a setlist</h2>
+          <div class="art" id="nArtist">generating…</div>
+          <div class="meta-line" id="nMeta"></div>
+          <div class="progress">
+            <div class="bar" id="pbar"><i id="pfill"></i></div>
+            <div class="times"><span id="tCur">0:00</span><span id="tTot">0:00</span></div>
+          </div>
+          <div class="transport">
+            <div class="tbtn" id="bPrev" title="Previous (◀◀)">◀◀</div>
+            <div class="tbtn play" id="bPlay" title="Play/Pause (space)">▶</div>
+            <div class="tbtn" id="bNext" title="Next (▶▶)">▶▶</div>
+            <div style="width:10px"></div>
+            <div class="tbtn off" id="vMin">−</div>
+            <div class="tbtn on" id="vMax">+</div>
+          </div>
+        </div>
+      </div>
+      <canvas class="card viz" id="viz" height="74"></canvas>
+      <div class="card djbox idle" id="djbox">
+        <div class="djtag" id="djname">STATION ID</div>
+        <div class="djtxt" id="djtxt">The DJ booth is standing by. Pick a track or hit play — the jukebox does the rest.</div>
+      </div>
+    </section>
+
+    <aside id="lib" class="card">
+      <div class="libhead">
+        <input id="search" placeholder="filter tracks…">
+      </div>
+      <div class="tracks" id="tracks"></div>
+    </aside>
+
+    <section class="panel">
+      <div class="ptabs">
+        <div class="ptab on" data-p="lyr">Lyrics</div>
+        <div class="ptab" data-p="exp">Export</div>
+        <div class="ptab" data-p="how">How to make more</div>
+      </div>
+      <div class="pbody" id="pbody"></div>
+    </section>
+  </main>
+
+  <footer>
+    <span>Make your own setlist:</span>
+    <code>python3 generate.py setlist --name "My Mix" --genres lofi,techno --count 6 --seed 42</code>
+    <span class="surprise" id="surprise">🎲 surprise me</span>
+  </footer>
+</div>
+
+<audio id="au"></audio>
+<script src="library/index.js"></script>
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const audio = $("#au");
+let SET = null, TRACKS = [], order = [], q = 0, segments = [], playing = false,
+    shuffle = false, repeat = false, danceMode = false, analyser = null, gain = null,
+    ctx = null, vol = 1.0;
+
+/* ---------------- setlists ---------------- */
+const IND = window.JUKEBOX_INDEX || [];
+const $sel = $("#setlist");
+function loadSetlistData(id) {
+  // playlist.js was written by generator as global; re-fetch per id:
+  return new Promise((res, rej) => {
+    const s = document.createElement("script");
+    s.src = `library/${id}/playlist.js?v=${Date.now()}`;
+    s.onload = () => res(window.JUKEBOX_SETLIST);
+    s.onerror = () => rej(new Error("load failed " + id));
+    document.head.appendChild(s);
+  });
+}
+function fillSelect(selId) {
+  $sel.innerHTML = "";
+  (IND.length ? IND : [{id:"none", name:"(no setlists — run generate.py demo)"}])
+    .forEach(e => { const o = document.createElement("option"); o.value = e.id; o.text = e.name; $sel.appendChild(o); });
+  const want = new URLSearchParams(location.search).get("set");
+  if (want) $sel.value = want;
+}
+async function selectSetlist(id, silent) {
+  if (!id) return;
+  try {
+    const data = await loadSetlistData(id);
+    applySetlist(data, silent);
+  } catch (err) {
+    $("#nTitle").textContent = "No setlist found";
+    $("#nArtist").textContent = String(err);
+  }
+}
+function applySetlist(data, silent) {
+  SET = data;
+  TRACKS = data.tracks || [];
+  document.documentElement.style.setProperty("--acc", data.accent && /^#/.test(data.accent) ? data.accent : "#ff2d78");
+  order = TRACKS.map((_, i) => i);
+  buildSegments(); q = 0; paintQueue();
+  paintTracks();
+  paintNow(TRACKS[order[0]] || null);
+  $("#nMeta").textContent = `${TRACKS.length} tracks · ${(data.genres||[]).join(" · ")}`;
+  document.title = `AI Jukebox — ${data.name}`;
+}
+
+/* ---------------- queue: DJ seg + song seg ---------------- */
+function buildSegments() {
+  segments = [];
+  if (SET && SET.lead && order.length) segments.push({kind:"dj", ...SET.lead, t:0});
+  order.forEach((ti, k) => {
+    const t = TRACKS[ti];
+    if (t.dj) segments.push({kind:"dj", audio:t.dj.audio, text:t.dj.text, persona:t.dj.persona, t:k});
+    segments.push({kind:"song", idx:ti, audio:t.audio, t:k});
+  });
+}
+function segSong(seg) { return seg.kind === "song" ? TRACKS[seg.idx] : null; }
+
+function playSegment() {
+  const seg = segments[q]; if (!seg) return;
+  audio.pause();
+  if (seg.kind === "dj") {
+    audio.src = seg.audio;
+    $("#air").classList.add("live"); $("#airtxt").textContent = "ON AIR";
+    $("#djbox").classList.remove("idle");
+    $("#djname").textContent = (seg.persona || "DJ").toUpperCase();
+    $("#djtxt").textContent = seg.text || "";
+    audio.play().catch(e => { next(true); });
+  } else {
+    audio.src = seg.audio;
+    $("#air").classList.remove("live"); $("#airtxt").textContent = "MUSIC";
+    $("#djbox").classList.add("idle");
+    $("#djtxt").textContent = `Up next: ${TRACKS[seg.idx].title} — ${TRACKS[seg.idx].artist}`;
+    paintNow(TRACKS[seg.idx]);
+    audio.play().catch(e => next(true));
+  }
+  paintQueue();
+}
+function next(silent) {
+  if (q < segments.length - 1) { q++; playSegment(); }
+  else if (repeat) { shuffleDeck(true); playSegment(); }
+  else { audio.pause(); playing = false; paint(); setUiPlaying(false); }
+  if (!silent) paintQueue();
+}
+function prev() {
+  if (audio.currentTime > 3) { audio.currentTime = 0; return; }
+  if (q > 0) { q--; playSegment(); }
+}
+function shuffleDeck(forceAll) {
+  const backup = [...order];
+  order = [...TRACKS.keys()];
+  for (let i = order.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; [order[i], order[j]] = [order[j], order[i]]; }
+  if (!forceAll && backup.length) order = backup;   // manual re-shuffle resets order anyway
+  buildSegments(); q = 0;
+}
+
+/* ---------------- UI painting ---------------- */
+function fmt(sec) { sec = Math.max(0, sec|0); return `${(sec/60)|0}:${String(sec%60).padStart(2,"0")}`; }
+function paintNow(t) {
+  if (!t) return;
+  const cover = t.cover, mp3 = t.audio;
+  $("#vcover").src = cover;
+  $("#nTitle").textContent = t.title;
+  $("#nArtist").textContent = `${t.artist} · seed ${t.seed}`;
+  $("#chGenre").textContent = t.genre;
+  $("#chKey").textContent = `${t.key} ${t.scale || ""}`;
+  $("#chBpm").textContent = `${t.bpm} bpm`;
+  $("#chMood").textContent = t.mood_label || `mood ${t.mood}`;
+}
+function paintTracks() {
+  const box = $("#tracks"); box.innerHTML = "";
+  TRACKS.forEach((t, i) => {
+    const d = document.createElement("div");
+    d.className = "tr"; d.dataset.i = i;
+    d.innerHTML = `<img src="${t.cover}" alt=""><div><div class="nm">${t.title}</div>
+      <div class="sm"><span>${t.artist}</span>${t.dj ? '<span class="djdot">● DJ</span>' : ""}</div></div>
+      <div class="dur">${fmt(t.length_s)}</div>`;
+    d.onclick = () => playTrack(i);
+    box.appendChild(d);
+  });
+}
+function paintQueue() {
+  const seg = segments[q];
+  const activeIdx = seg ? (seg.kind === "song" ? seg.idx
+    : (segments[q + 1] && segments[q + 1].kind === "song" ? segments[q + 1].idx : -1)) : -1;
+  document.querySelectorAll("#tracks .tr").forEach(el => {
+    el.classList.toggle("active", String(el.dataset.i) === String(activeIdx));
+  });
+  paint();
+}
+function playTrack(i) {
+  const where = segments.findIndex(s => s.kind === "song" && s.idx === i);
+  if (where >= 0) { q = where; playSegment(); }
+}
+function setUiPlaying(p) {
+  playing = p;
+  $("#bPlay").textContent = p ? "❚❚" : "▶";
+  $("#vinyl").classList.toggle("playing", p);
+}
+function paint() {
+  const seg = segments[q];
+  setUiPlaying(playing && !audio.paused);
+  if (seg && seg.kind === "song") {
+    const t = TRACKS[seg.idx];
+    $("#tTot").textContent = fmt(audio.duration || t.length_s || 0);
+    const p = audio.duration ? audio.currentTime / audio.duration : 0;
+    $("#pfill").style.width = (p * 100) + "%";
+    $("#tCur").textContent = fmt(audio.currentTime);
+  } else if (seg && seg.kind === "dj") {
+    $("#tTot").textContent = fmt(audio.duration || 0);
+    const p = audio.duration ? audio.currentTime / audio.duration : 0;
+    $("#pfill").style.width = (p * 100) + "%";
+    $("#tCur").textContent = fmt(audio.currentTime);
+  }
+}
+
+/* ---------------- audio wiring ---------------- */
+function setupViz() {
+  const cv = $("#viz"), c2d = cv.getContext("2d");
+  function drawFake(t) {
+    c2d.clearRect(0, 0, cv.width, cv.height);
+    const n = 56;
+    for (let i = 0; i < n; i++) {
+      const v = 0.12 + 0.88 * Math.abs(Math.sin(t / 220 + i * 0.55) * Math.sin(t / 131 + i * 0.23))
+        * (playing ? 1 : 0.25);
+      const h = v * cv.height * 0.9;
+      const acc = getComputedStyle(document.documentElement).getPropertyValue("--acc").trim();
+      c2d.fillStyle = acc.startsWith("#") ? acc : "#ff2d78";
+      c2d.globalAlpha = 0.25 + v * 0.75;
+      c2d.fillRect(i * (cv.width / n), cv.height - h, cv.width / n - 2, h);
+    }
+    c2d.globalAlpha = 1;
+    requestAnimationFrame(drawFake);
+  }
+  try {
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const src = ctx.createMediaElementSource(audio);
+    analyser = ctx.createAnalyser(); analyser.fftSize = 256;
+    gain = ctx.createGain(); gain.gain.value = vol;
+    src.connect(analyser); analyser.connect(gain); gain.connect(ctx.destination);
+    const buf = new Uint8Array(analyser.frequencyBinCount);
+    function drawReal() {
+      c2d.clearRect(0, 0, cv.width, cv.height);
+      analyser.getByteFrequencyData(buf);
+      const n = buf.length;
+      const acc = getComputedStyle(document.documentElement).getPropertyValue("--acc").trim() || "#ff2d78";
+      const acc2 = getComputedStyle(document.documentElement).getPropertyValue("--acc2").trim() || "#7b5cff";
+      for (let i = 0; i < n; i++) {
+        if (i < 4) continue;
+        const v = buf[i] / 255;
+        const h = Math.max(2, v * cv.height);
+        c2d.fillStyle = i % 4 < 2 ? acc : acc2;
+        c2d.globalAlpha = 0.2 + v * 0.8;
+        c2d.fillRect(i * (cv.width / n), cv.height - h, cv.width / n - 1, h);
+      }
+      c2d.globalAlpha = 1;
+      requestAnimationFrame(drawReal);
+    }
+    drawReal();
+  } catch (e) {
+    console.warn("analyser unavailable — fake bars", e);
+    requestAnimationFrame(drawFake);
+  }
+}
+
+audio.addEventListener("timeupdate", paint);
+audio.addEventListener("ended", () => next(false));
+audio.addEventListener("play", () => { playing = true; $("#vinyl").classList.add("playing"); paint(); });
+audio.addEventListener("pause", () => { $("#vinyl").classList.remove("playing"); paint(); });
+audio.addEventListener("error", () => { console.warn("audio error, skipping"); next(true); });
+
+/* volume */
+function setVol(v) {
+  vol = Math.min(1.4, Math.max(0, v));
+  if (gain) gain.gain.value = vol; else audio.volume = Math.min(1, vol);
+  $("#vMax").classList.toggle("on", vol >= 1); $("#vMin").classList.toggle("off", vol <= 0.05);
+  $("#vMax").textContent = "+"; $("#vMin").textContent = "−";
+}
+$("#vMax").onclick = () => setVol(vol + 0.2);
+$("#vMin").onclick = () => setVol(vol - 0.2);
+$("#pbar").addEventListener("click", e => {
+  const r = $("#pbar").getBoundingClientRect();
+  audio.currentTime = ((e.clientX - r.left) / r.width) * (audio.duration || 0);
+});
+$("#bPlay").onclick = () => {
+  if (!SET) return;
+  if (audio.paused) { if (!audio.src) playSegment(); else audio.play(); }
+  else audio.pause();
+};
+$("#bNext").onclick = () => next(false);
+$("#bPrev").onclick = prev;
+$("#btnRepeat").onclick = () => { repeat = !repeat; $("#btnRepeat").classList.toggle("on", repeat); };
+$("#btnRandom").onclick = () => { shuffle = true; shuffleDeck(false); if (segments.length) playSegment(); paintTracks(); };
+$setlist.onchange = () => selectSetlist($setlist.value, false);
+$("#search").oninput = e => {
+  const qq = e.target.value.toLowerCase();
+  document.querySelectorAll("#tracks .tr").forEach(el => {
+    el.style.display = el.textContent.toLowerCase().includes(qq) ? "" : "none";
+  });
+};
+
+/* keyboard */
+document.addEventListener("keydown", e => {
+  if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+  if (e.code === "Space") { e.preventDefault(); $("#bPlay").click(); }
+  if (e.key === "ArrowRight") next(false);
+  if (e.key === "ArrowLeft") prev();
+  if (e.key === "ArrowUp") setVol(vol + 0.15);
+  if (e.key === "ArrowDown") setVol(vol - 0.15);
+});
+
+/* surprise: copies a random generate command */
+$("#surprise").onclick = () => {
+  const genres = ["lofi","synthwave","techno","chiptune","cinematic","ambient"];
+  const g = [...genres].sort(() => Math.random() - .5).slice(0, 2 + (Math.random() * 2 | 0)).join(",");
+  const seed = (Math.random() * 1e9) | 0;
+  const n = 4 + (Math.random() * 3 | 0);
+  const cmd = `python3 generate.py setlist --name "Radio ${seed % 1000}" --theme "random transmission" --genres ${g} --count ${n} --seed ${seed}`;
+  navigator.clipboard?.writeText(cmd.trim());
+  $("#pbody").textContent = "Copied to clipboard:\n" + cmd;
+  showPanel("how");
+};
+
+/* panel */
+function showPanel(p) {
+  document.querySelectorAll(".ptab").forEach(x => x.classList.toggle("on", x.dataset.p === p));
+  const seg = segments[q];
+  const t = seg && seg.kind === "song" ? TRACKS[seg.idx] : TRACKS[order[0]];
+  if (p === "lyr") $("#pbody").textContent = t ? (t.lyrics || []).join("\n") : "no lyrics";
+  if (p === "exp" && t) {
+    $("#pbody").innerHTML = `
+      <b style="color:var(--fg)">${t.title} — downloads</b><br><br>
+      <div class="export">
+        <a href="${t.audio}" download="${t.title}.mp3">song.mp3</a>
+        <a href="${t.wav}" download="${t.title}.wav">song.wav</a>
+        <a href="${t.cover}" download="${t.title}.svg">cover.svg</a>
+        <a href="javascript:void 0" onclick="dlLyrics()">lyrics.txt</a>
+      </div>`;
+  }
+  if (p === "how") $("#pbody").textContent =
+    "Songs, covers and DJ voices are made by the generator:\n\n" +
+    "  python3 generate.py demo        # rebuild demo setlists\n" +
+    "  python3 generate.py setlist --name \"My Mix\" \\\n" +
+    "      --genres lofi,techno --count 6 --seed 42\n\n" +
+    "  python3 generate.py song --genre synthwave --seed 7 \\\n" +
+    "      --bpm 104 --key-note 57 --scale dorian --mood 0.8 \\\n" +
+    "      --length long --vocals\n\n" +
+    "  python3 generate.py serve       # http://localhost:8777/player.html\n\n" +
+    "Tuning knobs per song: --genre, --bpm, --key-note (MIDI), --scale,\n" +
+    "--mood (0..1), --length (short|medium|long), --seed, --title,\n" +
+    "--vocals (robotic vocoder), --llm (LLM lyrics + DJ scripts).\n" +
+    "Player: space = play/pause, ←/→ = track, ↑/↓ = volume.";
+}
+document.querySelectorAll(".ptab").forEach(x => x.onclick = () => { document.querySelector(".panel").style.display = "flex"; showPanel(x.dataset.p); });
+window.dlLyrics = () => {
+  const seg = segments[q]; const t = seg && seg.kind === "song" ? TRACKS[seg.idx] : TRACKS[order[0]];
+  if (!t) return;
+  const b = new Blob([(t.lyrics || []).join("\n")], {type:"text/plain"});
+  const a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = t.title + ".txt"; a.click();
+};
+document.querySelector(".panel").style.display = "flex";
+showPanel("lyr");
+setInterval(paint, 250);
+setupViz();
+setVol(1);
+fillSelect();
+selectSetlist($sel.value, true);
+</script>
+</body>
+</html>
