@@ -33,11 +33,22 @@ if printf '%s' "$CMD" | grep -qE '\bgit (add|commit|push)\b'; then
     echo "guard: refused — .env / secrets file would be committed."
     exit 2
   fi
-  # staged content check (generous patterns; .env.example placeholders are fine)
-  if git diff --cached 2>/dev/null | grep -E '^\+' | grep -qvE '^\+.*(your-|example|placeholder|EXAMPLE|YOUR_)' | \
-     grep -qiE 'api[_-]?key[\"'']?[:=][\"'']?[A-Za-z0-9]{12,}|bearer [A-Za-z0-9._-]{16,}|password[\"'']?[:=][\"'']?[A-Za-z0-9]{8,}|secret[\"'']?[:=][\"'']?[A-Za-z0-9]{8,}|token[\"'']?[:=][\"'']?[A-Za-z0-9]{12,}'; then
-    echo "guard: possible credential detected in staged changes — check before committing."
-    exit 2
-  fi
+  # staged content check (python — placeholder lines exempt)
+  python3 - "$1" <<'PY'
+import re, subprocess, sys
+staged = subprocess.run(["git", "diff", "--cached"], capture_output=True, text=True).stdout
+lines = [l[1:].strip() for l in staged.splitlines()
+         if l.startswith("+") and not l.startswith("+++")]
+lines = [l for l in lines
+         if not re.search(r"your-|example|placeholder|EXAMPLE|YOUR_", l)]
+pat = re.compile(
+    r"(?:api[_-]?key|token)[^\w]*[:=][^\w]*[\"']?[A-Za-z0-9]{12,}"
+    r"|(?:password|secret)[^\w]*[:=][^\w]*[\"']?[A-Za-z0-9]{8,}"
+    r"|bearer[^\w]+[A-Za-z0-9._-]{16,}", re.I)
+if any(pat.search(l) for l in lines):
+    print("guard: possible credential detected in staged changes — check before committing.")
+    sys.exit(2)
+PY
+  [ $? -eq 2 ] && exit 2
 fi
 exit 0
