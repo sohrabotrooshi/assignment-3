@@ -62,13 +62,38 @@ def _say(text: str, voice: str, out_wav: str, rate: int | None = None) -> bool:
 
 
 # ------------------------------------------------------------ LLM writing ---
-LLM_URL = "http://dobolyi.com:9001/v1/chat/completions"
-LLM_MODEL = "cyankiwi/Qwen3.6-35B-A3B-AWQ-4bit"
-LLM_KEY = "YOUR_API_KEY"
+# Credentials are read from the environment or a GITIGNORED ./env file —
+# never hardcode keys. Copy .env.example and fill it in locally.
+def _load_dotenv() -> None:
+    import os
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+    if not os.path.exists(path):
+        return
+    try:
+        with open(path) as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, v = line.split("=", 1)
+                os.environ.setdefault(k.strip(), v.strip())
+    except OSError:
+        pass
+
+
+_load_dotenv()
+import os as _os
+
+LLM_URL = _os.environ.get("JUKEBOX_LLM_URL", "http://dobolyi.com:9001/v1/chat/completions")
+LLM_MODEL = _os.environ.get("JUKEBOX_LLM_MODEL", "cyankiwi/Qwen3.6-35B-A3B-AWQ-4bit")
+LLM_KEY = _os.environ.get("JUKEBOX_LLM_KEY", "") or None
 
 
 def _llm(prompt: str, max_tokens: int = 220, timeout: int = 25) -> str | None:
     import urllib.request
+    if not LLM_KEY:
+        print("[dj] no JUKEBOX_LLM_KEY set — using template script (see .env.example).")
+        return None
     body = json.dumps({
         "model": LLM_MODEL,
         "messages": [{"role": "user", "content": prompt}],
