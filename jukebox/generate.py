@@ -212,7 +212,7 @@ def make_setlist(name: str, theme: str, genres: list[str], count: int,
         info = make_song(gseed, genre, tdir, mood=mood, length=length,
                          llm=llm, vocals=vocals_on and i == 1)
         info["rel"] = {k: info[k] for k in ("audio", "cover", "wav")}
-        moves = {k: f"song_{i:02d}/{v}" for k, v in info["rel"].items()}
+        moves = {k: f"library/{slug}/song_{i:02d}/{v}" for k, v in info["rel"].items()}
         info.update(moves)
         info.pop("rel", None)
         tracks.append(info)
@@ -224,11 +224,13 @@ def make_setlist(name: str, theme: str, genres: list[str], count: int,
         lead_text, lead_persona = _lead_script(theme, name, len(tracks))
         lead_audio = os.path.join(out, "dj_00.wav")
         ok = dj_mod.synth_voice(lead_persona, lead_text, lead_audio)
-        lead = dict(audio="dj_00.wav", text=lead_text, persona=lead_persona, ok=ok)
+        lead = dict(audio=f"library/{slug}/dj_00.wav", text=lead_text,
+                    persona=lead_persona, ok=ok)
         # per-track intros
         for i, t in enumerate(tracks):
             persona = dj_mod.pick_persona(t["genre"], rnd) if mix_persona else "nova"
             clip = make_dj_clip(out, i + 1, t, persona, use_llm=llm)
+            clip["audio"] = f"library/{slug}/{clip['audio']}"
             t["dj"] = clip
             added += int(clip["ok"])
 
