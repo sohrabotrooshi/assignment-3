@@ -41,6 +41,14 @@ def wav_stats(path: str) -> tuple[float, float, int] | None:
         return None
 
 
+def mp3_ok(path: str) -> bool:
+    """Non-trivial size and an ID3 tag or MPEG frame sync at the start."""
+    with open(path, "rb") as f:
+        head = f.read(3)
+    return (os.path.getsize(path) > 1000 and
+            (head == b"ID3" or (len(head) > 1 and head[0] == 0xFF and head[1] & 0xE0 == 0xE0)))
+
+
 def main() -> int:
     if not os.path.isdir(LIB):
         print("no library/ — run: python3 generate.py demo")
@@ -99,6 +107,9 @@ def main() -> int:
                 dp = os.path.join(ROOT, dj["audio"])
                 if not os.path.exists(dp):
                     failures.append(f"{tag} dj audio missing")
+                elif dp.endswith(".mp3"):              # Chatterbox may return MP3
+                    if not mp3_ok(dp):
+                        failures.append(f"{tag} dj mp3 undecodable")
                 else:
                     st = wav_stats(dp)
                     if st is None:
