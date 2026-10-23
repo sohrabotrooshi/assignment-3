@@ -22,7 +22,36 @@ can optionally be upgraded to an LLM endpoint with `--llm`.
   by `lyrics.py` (or an LLM you point it at), and DJ voices use macOS system
   `say` voices — no songs, lyrics, art, or voice samples ship with the repo.
 
-## Quick start
+## Claude Code for teammates
+
+The repo ships a shared Claude Code workspace, so any teammate's Claude starts
+already wired to the project:
+
+- **Project memory & rules** — `CLAUDE.md` (architecture, commands, the
+  no-secrets / no-third-party-assets rules, branch+PR flow).
+- **Permissions & guard** — `.claude/settings.json` denies reading `.env`,
+  denies pushing to `main` / force-push, and `.claude/hooks/guard.sh` blocks
+  destructive commands and commits that would leak credentials (runs
+  automatically on every tool call).
+- **Slash commands** — `/generate`, `/verify`, `/security-check`
+- **Subagent** — `@arranger` (music/synthesis specialist for `engine.py`)
+
+Setup for each teammate:
+
+```bash
+npm install -g @anthropic-ai/claude-code   # then: claude  (auth once)
+git clone https://github.com/sohrabotrooshi/assignment-3.git
+cd assignment-3
+claude
+```
+
+Run-from-GitHub option: the repo includes `.github/workflows/claude-code.yml`
+(workflow_dispatch). An owner sets the **`ANTHROPIC_API_KEY`** secret
+(Settings → Secrets → Actions — server-side, never in the repo), and anyone
+on the repo can then trigger a Claude Code run from the Actions tab with a
+task prompt.
+
+### Quick start
 
 ```bash
 # from this folder

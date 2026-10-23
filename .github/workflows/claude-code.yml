@@ -1,0 +1,30 @@
+name: Claude Code (team)
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: Task for Claude Code to run in this repo
+        required: true
+        default: "Run python3 jukebox/verify.py and report results"
+      model:
+        description: Model (sonnet / opus / haiku)
+        default: sonnet
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  claude-code:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Claude Code (print mode)
+        run: |
+          npx -y @anthropic-ai/claude-code -p "${{ github.event.inputs.task }}" \
+            --model ${{ github.event.inputs.model }} --max-turns 40 \
+            --dangerously-skip-permissions
+        env:
+          # Repo secret (Settings → Secrets → Actions). Server-side only.
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
