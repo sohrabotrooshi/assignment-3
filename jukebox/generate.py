@@ -170,14 +170,26 @@ def _vocoder_vocal(lines: list[str], song: engine.Song, key_note: int,
 
 
 def make_dj_clip(out_dir: str, idx: int, track: dict, persona: str = "nova",
-                 use_llm: bool = True) -> dict:
-    script = dj_mod.script_for(persona, track, "intro", use_llm=use_llm)
-    audio = os.path.join(out_dir, f"dj_{idx:02d}.wav")
-    ok = dj_mod.synth_voice(persona, script, audio)
+                 use_llm: bool = True, prev: dict | None = None,
+                 voice_ref: bytes | None = None) -> dict:
+    script = dj_mod.script_for(persona, track, "intro", use_llm=use_llm, prev=prev)
+    audio = dj_mod.synth_voice(persona, script, os.path.join(out_dir, f"dj_{idx:02d}"),
+                               ref=voice_ref)
     with open(os.path.join(out_dir, f"dj_{idx:02d}.txt"), "w") as f:
         f.write(script)
-    return dict(audio=f"dj_{idx:02d}.wav", text=script, persona=persona,
-                ok=ok)
+    return dict(audio=os.path.basename(audio or f"dj_{idx:02d}.wav"), text=script,
+                persona=persona, ok=audio is not None)
+
+
+def _voice_ref(path: str | None) -> bytes | None:
+    """Load --voice-ref / JUKEBOX_DJ_VOICE_REF, or exit with a readable error."""
+    path = path or os.environ.get("JUKEBOX_DJ_VOICE_REF")
+    if not path:
+        return None
+    try:
+        return dj_mod.load_voice_ref(path)
+    except ValueError as exc:
+        sys.exit(f"[dj] {exc}")
 
 
 def setlist_slug(name: str) -> str:
@@ -188,7 +200,8 @@ def setlist_slug(name: str) -> str:
 def make_setlist(name: str, theme: str, genres: list[str], count: int,
                  seed: int = 20261022, length: str = "medium", dj_on: bool = True,
                  mix_persona: bool = True, vocals_on: bool = False,
-                 llm: bool = False, force: bool = False) -> str:
+                 llm: bool = False, force: bool = False,
+                 voice_ref: bytes | None = None) -> str:
     slug = setlist_slug(name)
     out = os.path.join(LIB, slug)
     if os.path.exists(out):
@@ -222,17 +235,23 @@ def make_setlist(name: str, theme: str, genres: list[str], count: int,
     if dj_on:
         # station id at top
         lead_text, lead_persona = _lead_script(theme, name, len(tracks))
-        lead_audio = os.path.join(out, "dj_00.wav")
-        ok = dj_mod.synth_voice(lead_persona, lead_text, lead_audio)
-        lead = dict(audio=f"library/{slug}/dj_00.wav", text=lead_text,
-                    persona=lead_persona, ok=ok)
-        # per-track intros
+        lead_audio = dj_mod.synth_voice(lead_persona, lead_text, os.path.join(out, "dj_00"),
+                                        ref=voice_ref)
+        # a failed clip is left out so the queue goes straight to the song
+        lead = dict(audio=f"library/{slug}/{os.path.basename(lead_audio)}", text=lead_text,
+                    persona=lead_persona, ok=True) if lead_audio else None
+        # per-track intros, each bridging from the song before it
         for i, t in enumerate(tracks):
             persona = dj_mod.pick_persona(t["genre"], rnd) if mix_persona else "nova"
-            clip = make_dj_clip(out, i + 1, t, persona, use_llm=llm)
-            clip["audio"] = f"library/{slug}/{clip['audio']}"
-            t["dj"] = clip
-            added += int(clip["ok"])
+            clip = make_dj_clip(out, i + 1, t, persona, use_llm=llm,
+                                prev=tracks[i - 1] if i else None, voice_ref=voice_ref)
+            if clip["ok"]:
+                clip["audio"] = f"library/{slug}/{clip['audio']}"
+                t["dj"] = clip
+                added += 1
+        if added < len(tracks):
+            print(f"[dj] WARNING: {len(tracks) - added} of {len(tracks)} DJ clips failed; "
+                  f"those songs play without an intro. Check JUKEBOX_TTS_URL / key.")
 
     accent = art_mod.palette(seed + 1, tracks[0]["genre"], 0.5)
     acc_hex = _hsl_hex(accent["hue2"], accent["sat"] * 1.15, min(0.7, accent["bri"] + 0.5))
@@ -300,14 +319,15 @@ def cmd_setlist(a):
     make_setlist(a.name, a.theme or a.name, a.genres.split(",") if a.genres else [],
                  a.count, seed=a.seed, length=a.length, dj_on=not a.no_dj,
                  mix_persona=not a.one_voice, vocals_on=a.vocals, llm=a.llm,
-                 force=a.force)
+                 force=a.force, voice_ref=_voice_ref(a.voice_ref))
 
 
 def cmd_dj(a):
     os.makedirs(a.out_dir, exist_ok=True)
+    prev = dict(title=a.prev_title) if a.prev_title else None
     clip = make_dj_clip(a.out_dir, a.idx, dict(title=a.title, genre=a.genre, bpm=a.bpm or 100,
                                                seed=a.seed, mood_label=a.mood or "blue hour"),
-                        a.persona, use_llm=a.llm)
+                        a.persona, use_llm=a.llm, prev=prev, voice_ref=_voice_ref(a.voice_ref))
     print(json.dumps(clip, indent=1))
 
 
@@ -382,6 +402,8 @@ def main():
     p.add_argument("--seed", type=int, default=20261022)
     p.add_argument("--length", choices=("short", "medium", "long"), default="medium")
     p.add_argument("--no-dj", action="store_true", dest="no_dj")
+    p.add_argument("--voice-ref", dest="voice_ref",
+                   help="local MP3/WAV (<=10 MB) to clone the DJ voice; kept out of library/")
     p.add_argument("--one-voice", action="store_true", dest="one_voice")
     p.add_argument("--vocals", action="store_true", help="vocoder on track 1")
     p.add_argument("--llm", action="store_true", help="LLM scripts+lyrics")
@@ -396,6 +418,9 @@ def main():
     p.add_argument("--out-dir", default=os.path.join(LIB, "dj"))
     p.add_argument("--idx", type=int, default=1)
     p.add_argument("--llm", action="store_true")
+    p.add_argument("--prev-title", dest="prev_title", help="title of the song that just ended")
+    p.add_argument("--voice-ref", dest="voice_ref",
+                   help="local MP3/WAV (<=10 MB) to clone the DJ voice")
     p.set_defaults(func=cmd_dj)
 
     p = sub.add_parser("art", help="one cover")
