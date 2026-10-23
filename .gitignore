@@ -6,3 +6,8 @@ __pycache__/
 .env
 .claude/settings.local.json
 claude-code.config.json
+
+# DJ voice references and probe output — never commit (assignment safeguard)
+uploads/
+voice_refs/
+dj_probe_out/
