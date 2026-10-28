@@ -372,7 +372,7 @@ function playSegment() {
     $("#djbox").classList.remove("idle");
     $("#djname").textContent = (seg.persona || "DJ").toUpperCase();
     $("#djtxt").textContent = seg.text || "";
-    audio.play().catch(() => next(true));
+    safePlay().catch(() => next(true));
   } else {
     audio.src = seg.audio;
     aerial(false);
@@ -381,7 +381,7 @@ function playSegment() {
     $("#djtxt").textContent = `Up next: ${t.title} — ${t.artist}`;
     paintNow(t);
     showPanel(curTab);
-    audio.play().catch(() => next(true));
+    safePlay().catch(() => next(true));
   }
   paintQueue();
 }
@@ -532,13 +532,29 @@ function setupViz() {
   } catch (e) { requestAnimationFrame(fake); requestAnimationFrame(fake); }
 }
 
+/* ---------------- audio helpers ---------------- */
+function ensureCtx() {
+  try { if (ctx && ctx.state === "suspended") ctx.resume(); } catch (e) {}
+}
+/* browsers suspend AudioContext created before a user gesture; resume on
+   any interaction so the media element can actually advance/be heard */
+window.addEventListener("pointerdown", ensureCtx, true);
+window.addEventListener("keydown", ensureCtx, true);
+function safePlay() { ensureCtx(); return audio.play(); }
+
 /* ---------------- wiring ---------------- */
 audio.addEventListener("timeupdate", paint);
 audio.addEventListener("ended", () => next(false));
 audio.addEventListener("play", () => { playing = true; setUi(true); aerial(false); paint(); });
 audio.addEventListener("pause", () => setUi(false));
 audio.addEventListener("error", () => next(true));
-$("#bPlay").onclick = () => { if (!SET) return; if (audio.paused) { if (!audio.src) playSegment(); else audio.play(); } else audio.pause(); };
+$("#bPlay").onclick = () => {
+  if (!SET && IND.length) selectSetlist(IND[0].id);
+  if (!SET) return;
+  ensureCtx();
+  if (audio.paused) { if (!audio.src) playSegment(); else safePlay().catch(() => {}); }
+  else audio.pause();
+};
 $("#bNext").onclick = () => next(false);
 $("#bPrev").onclick = prev;
 $("#bRepeat").onclick = () => { repeat = !repeat; $("#bRepeat").classList.toggle("on", repeat); };
